@@ -218,4 +218,4 @@ services:
       - ${MOVIE_LIBRARY}:/movies
       - ${TV_LIBRARY}:/tv
       - ${MUSIC_LIBRARY}:/music
-    network_mode: host
+    network: host
