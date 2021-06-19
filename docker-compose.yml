@@ -1,0 +1,199 @@
+---
+version: "2"
+services:
+  vpn:
+    image: ekristen/openvpn-client
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ${ARR_CONFIG}/vpn:/vpn
+    command: --config /vpn/client.conf --auth-nocache
+    restart: unless-stopped
+
+  deluge:
+    image: linuxserver/deluge
+    depends_on:
+      - vpn
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/deluge:/config
+      - ${DOWNLOADS}:/downloads
+      - ${INCOMPLETE}/deluge:/incomplete
+    restart: unless-stopped
+    network_mode: "service:vpn"
+
+  sabnzbd:
+    image: linuxserver/sabnzbd
+    depends_on:
+      - vpn
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/sabnzbd:/config
+      - ${DOWNLOADS}:/downloads
+      - ${INCOMPLETE}/sabnzbd:/incomplete
+    network_mode: "service:vpn"
+    restart: unless-stopped
+
+  nginx:
+    image: dperson/nginx
+    depends_on:
+      - sabnzbd
+      - deluge
+    ports:
+      - 8888:80
+    links:
+      - "vpn:vpn"
+    command: -c "10M" -w "http://vpn:8080/sabnzbd;/sabnzbd" -w 'http://vpn:8112/;/deluge;X-Deluge-Base \"/deluge/\"'
+    restart: unless-stopped
+
+  flaresolverr:
+    image: flaresolverr/flaresolverr
+    environment:
+      - TZ=${TIMEZONE}
+
+  jackett:
+    image: linuxserver/jackett
+    depends_on:
+      - flaresolverr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/jackett:/config
+    links:
+      - flaresolverr
+    restart: unless-stopped
+
+  sonarr:
+    image: linuxserver/sonarr
+    depends_on:
+      - sabnzbd
+      - deluge
+      - jackett
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/sonarr:/config
+      - ${TV_LIBRARY}:/tv
+      - ${DOWNLOADS}:/downloads
+    ports:
+      - 8989:8989
+    links:
+      - "vpn:downloader"
+      - jackett
+    restart: unless-stopped
+
+  radarr:
+    image: linuxserver/radarr
+    depends_on:
+      - sabnzbd
+      - deluge
+      - jackett
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/radarr:/config
+      - ${MOVIE_LIBRARY}:/movies
+      - ${DOWNLOADS}:/downloads
+    ports:
+      - 7878:7878
+    links:
+      - "vpn:downloader"
+      - jackett
+    restart: unless-stopped
+
+  lidarr:
+    image: linuxserver/lidarr
+    depends_on:
+      - sabnzbd
+      - deluge
+      - jackett
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/lidarr:/config
+      - ${MUSIC_LIBRARY}:/movies
+      - ${DOWNLOADS}:/downloads
+    ports:
+      - 8686:8686
+    links:
+      - "vpn:downloader"
+      - jackett
+    restart: unless-stopped
+
+  ombi:
+    image: linuxserver/ombi
+    depends_on:
+      - sonarr
+      - radarr
+      - lidarr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/ombi:/config
+    ports:
+      - 3579:3579
+    links:
+      - sonarr
+      - radarr
+      - lidarr
+    restart: unless-stopped
+
+  organizr:
+    image: organizr/organizr
+    depends_on:
+      - sonarr
+      - radarr
+      - lidarr
+      - ombi
+      - deluge
+      - sabnzbd
+      - nginx
+      - jackett
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/organizr:/config
+    ports:
+      - 8882:80
+    links:
+      - "vpn:downloader"
+      - sonarr
+      - radarr
+      - lidarr
+      - ombi
+      - jackett
+    restart: unless-stopped
+
+  plex:
+    image: plexinc/pms-docker
+    environment:
+      - PLEX_UID=${UID}
+      - PLEX_GID=${GID}
+      - TZ=${TIMEZONE}
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    volumes:
+      - ${ARR_CONFIG}/plex
+      - ${MOVIE_LIBRARY}:/movies
+      - ${TV_LIBRARY}:/tv
+      - ${MUSIC_LIBRARY}:/music
+    network_mode: host
