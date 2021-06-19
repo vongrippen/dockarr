@@ -136,6 +136,26 @@ services:
       - jackett
     restart: unless-stopped
 
+  prowlarr:
+    image: linuxserver/prowlarr
+    depends_on:
+      - sonarr
+      - radarr
+      - lidarr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${ARR_CONFIG}/prowlarr:/config
+    ports:
+      - 9696:9696
+    links:
+      - sonarr
+      - radarr
+      - lidarr
+    restart: unless-stopped
+
   ombi:
     image: linuxserver/ombi
     depends_on:
@@ -162,6 +182,7 @@ services:
       - sonarr
       - radarr
       - lidarr
+      - prowlarr
       - ombi
       - deluge
       - sabnzbd
@@ -180,6 +201,7 @@ services:
       - sonarr
       - radarr
       - lidarr
+      - prowlarr
       - ombi
       - jackett
     restart: unless-stopped
